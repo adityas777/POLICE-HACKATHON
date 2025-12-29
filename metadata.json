@@ -1,0 +1,7 @@
+{
+  "name": "Lekhan-AI: Hindi Document Intelligence",
+  "description": "A state-of-the-art Hindi OCR and document intelligence platform designed for Indian government documents, FIRs, and handwritten notes using Gemini multimodal reasoning.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
