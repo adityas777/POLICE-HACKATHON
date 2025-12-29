@@ -8,6 +8,7 @@ import Auth from './components/Auth';
 import { OCRMode, OCRResultData, VaultItem, User, VaultStatus } from './types';
 import { MODES, SUPPORTED_SOURCE_LANGS, SUPPORTED_TARGET_LANGS } from './constants.tsx';
 import { performOCR } from './services/geminiService';
+import { getUserVaultFromDB, saveVaultItemToDB, deleteVaultItemFromDB, updateVaultStatusInDB } from './services/dbService';
 import { jsPDF } from 'jspdf';
 
 const App: React.FC = () => {
@@ -33,16 +34,12 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const loadUserVault = (userId: string) => {
-    const savedVault = localStorage.getItem(`lekhan_vault_${userId}`);
-    if (savedVault) {
-      try {
-        setVault(JSON.parse(savedVault));
-      } catch (e) {
-        console.error("Failed to parse user vault", e);
-      }
-    } else {
-      setVault([]);
+  const loadUserVault = async (userId: string) => {
+    try {
+      const items = await getUserVaultFromDB(userId);
+      setVault(items);
+    } catch (e) {
+      console.error("Failed to load user vault from IndexedDB", e);
     }
   };
 
@@ -58,12 +55,6 @@ const App: React.FC = () => {
     setResult(null);
     setImage(null);
     localStorage.removeItem('lekhan_active_user');
-  };
-
-  const saveVault = (newVault: VaultItem[]) => {
-    if (!user) return;
-    setVault(newVault);
-    localStorage.setItem(`lekhan_vault_${user.id}`, JSON.stringify(newVault));
   };
 
   const handleFileSelect = (base64: string, mime: string) => {
@@ -177,7 +168,10 @@ const App: React.FC = () => {
         targetLang: targetLangObj.name,
         status: 'not-visited'
       };
-      saveVault([newItem, ...vault.slice(0, 49)]);
+      
+      // Scalable Storage via IndexedDB
+      await saveVaultItemToDB(newItem);
+      loadUserVault(user.id);
 
     } catch (err: any) {
       setError(err.message || 'Interface Link Failure.');
@@ -195,15 +189,22 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeleteFromVault = (id: string) => {
-    saveVault(vault.filter(item => item.id !== id));
+  const handleDeleteFromVault = async (id: string) => {
+    try {
+      await deleteVaultItemFromDB(id);
+      if (user) loadUserVault(user.id);
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
   };
 
-  const handleUpdateStatus = (id: string, newStatus: VaultStatus) => {
-    const updatedVault = vault.map(item => 
-      item.id === id ? { ...item, status: newStatus } : item
-    );
-    saveVault(updatedVault);
+  const handleUpdateStatus = async (id: string, newStatus: VaultStatus) => {
+    try {
+      await updateVaultStatusInDB(id, newStatus);
+      if (user) loadUserVault(user.id);
+    } catch (e) {
+      console.error("Status update failed", e);
+    }
   };
 
   if (!user) {
@@ -222,13 +223,12 @@ const App: React.FC = () => {
       <main className="container mx-auto px-6 pt-32 pb-32 max-w-[1500px]">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-16">
           
-          {/* Dashboard Panel */}
           <div className="xl:col-span-4 space-y-12 no-print">
             <div className="space-y-8">
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-3 px-4 py-2 bg-cyan-500/10 rounded-full border border-cyan-500/30 neural-pulse">
                   <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                  <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest space-mono">Neural Status: Stable</span>
+                  <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest space-mono">Neural Matrix v5.0 Active</span>
                 </div>
                 <button 
                   onClick={() => setShowVault(!showVault)}
@@ -238,9 +238,9 @@ const App: React.FC = () => {
                 </button>
               </div>
               <h2 className="text-7xl font-extrabold text-white leading-none tracking-tighter italic">
-                {showVault ? 'Intelligence' : 'Master'}<br/>
+                {showVault ? 'Scalable' : 'Master'}<br/>
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-indigo-400 to-fuchsia-600">
-                  {showVault ? 'Registry.' : 'Matrix.'}
+                  {showVault ? 'Intelligence.' : 'Matrix.'}
                 </span>
               </h2>
             </div>
@@ -281,12 +281,11 @@ const App: React.FC = () => {
                         "Initiate Matrix Scan"
                       )}
                     </button>
-                    <p className="text-[10px] text-center text-slate-600 mt-6 font-bold uppercase tracking-[0.2em] italic">Proprietary Reconstruction Protocol 4.2</p>
+                    <p className="text-[10px] text-center text-slate-600 mt-6 font-bold uppercase tracking-[0.2em] italic">Scalable Indexed Storage Active</p>
                   </div>
 
                   {error && (
-                    <div className="p-8 bg-red-500/5 border border-red-500/20 rounded-[2rem] text-red-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-5 animate-in slide-in-from-top-4">
-                      <div className="w-2 h-2 rounded-full bg-red-500 animate-ping"></div>
+                    <div className="p-8 bg-red-500/5 border border-red-500/20 rounded-[2rem] text-red-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-5">
                       {error}
                     </div>
                   )}
@@ -296,18 +295,13 @@ const App: React.FC = () => {
               <div className="space-y-10 animate-in fade-in slide-in-from-left-6 duration-700">
                 <div className="glass-card p-10 rounded-[3rem] border-cyan-500/10">
                   <p className="text-slate-400 text-lg font-medium leading-relaxed italic">
-                    Identity confirmed: <span className="text-cyan-400">{user.name}</span>. Accessing isolated records from the deep intelligence matrix.
+                    Identity confirmed: <span className="text-cyan-400">{user.name}</span>. IndexedDB sync established for high-capacity intelligence storage.
                   </p>
-                </div>
-                <div className="p-8 bg-indigo-500/5 rounded-[2rem] border border-white/5">
-                   <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest space-mono">Security Note</p>
-                   <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">Local records are encrypted and bound to your active neural profile. Unauthorized access is blocked by hardware encryption.</p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Result / Vault Area */}
           <div className="xl:col-span-8">
             {showVault ? (
               <Vault 
@@ -340,28 +334,14 @@ const App: React.FC = () => {
                 {loading && (
                   <div className="h-full min-h-[850px] glass-card rounded-[4.5rem] flex flex-col items-center justify-center p-24 space-y-20 relative overflow-hidden shadow-inner">
                     <div className="scanning-beam"></div>
-                    
                     <div className="relative z-10 text-center space-y-16">
                       <div className="relative inline-flex items-center justify-center">
                         <div className="w-72 h-72 border-[2px] border-white/5 rounded-full"></div>
                         <div className="absolute inset-0 w-72 h-72 border-t-[4px] border-transparent border-t-cyan-500 rounded-full animate-spin"></div>
                         <div className="absolute inset-10 w-52 h-52 border-b-[4px] border-transparent border-b-fuchsia-500 rounded-full animate-[spin_4s_linear_infinite_reverse]"></div>
                         <div className="absolute inset-20 w-32 h-32 border-l-[4px] border-transparent border-l-emerald-500 rounded-full animate-[spin_3s_linear_infinite]"></div>
-                        <div className="absolute w-12 h-12 bg-white rounded-full blur-xl animate-pulse opacity-40"></div>
                       </div>
-                      <div className="space-y-6">
-                        <h4 className="text-4xl font-extrabold text-white tracking-tighter italic">Normalizing Matrix Fragments</h4>
-                        <div className="flex flex-col items-center gap-6">
-                           <div className="flex gap-4">
-                              <span className="px-4 py-1.5 bg-white/5 rounded-full text-[9px] font-black text-cyan-400 uppercase tracking-widest border border-cyan-500/20">OCR Core</span>
-                              <span className="px-4 py-1.5 bg-white/5 rounded-full text-[9px] font-black text-fuchsia-400 uppercase tracking-widest border border-fuchsia-500/20">Translator</span>
-                              <span className="px-4 py-1.5 bg-white/5 rounded-full text-[9px] font-black text-emerald-400 uppercase tracking-widest border border-emerald-500/20">Validator</span>
-                           </div>
-                           <p className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.4em] max-w-sm mx-auto leading-relaxed">
-                             Reconstructing geometry • Normalizing Unicode • Extracting Intelligence
-                           </p>
-                        </div>
-                      </div>
+                      <h4 className="text-4xl font-extrabold text-white tracking-tighter italic">Normalizing Matrix Fragments</h4>
                     </div>
                   </div>
                 )}
