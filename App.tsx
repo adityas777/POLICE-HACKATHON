@@ -5,7 +5,7 @@ import FileUploader from './components/FileUploader';
 import OCRResult from './components/OCRResult';
 import Vault from './components/Vault';
 import Auth from './components/Auth';
-import { OCRMode, OCRResultData, VaultItem, User } from './types';
+import { OCRMode, OCRResultData, VaultItem, User, VaultStatus } from './types';
 import { MODES, SUPPORTED_SOURCE_LANGS, SUPPORTED_TARGET_LANGS } from './constants.tsx';
 import { performOCR } from './services/geminiService';
 import { jsPDF } from 'jspdf';
@@ -174,7 +174,8 @@ const App: React.FC = () => {
         image: { base64: image.base64, mime: image.mime },
         result: parsedData,
         sourceLang: sourceLangObj.name,
-        targetLang: targetLangObj.name
+        targetLang: targetLangObj.name,
+        status: 'not-visited'
       };
       saveVault([newItem, ...vault.slice(0, 49)]);
 
@@ -196,6 +197,13 @@ const App: React.FC = () => {
 
   const handleDeleteFromVault = (id: string) => {
     saveVault(vault.filter(item => item.id !== id));
+  };
+
+  const handleUpdateStatus = (id: string, newStatus: VaultStatus) => {
+    const updatedVault = vault.map(item => 
+      item.id === id ? { ...item, status: newStatus } : item
+    );
+    saveVault(updatedVault);
   };
 
   if (!user) {
@@ -302,7 +310,12 @@ const App: React.FC = () => {
           {/* Result / Vault Area */}
           <div className="xl:col-span-8">
             {showVault ? (
-              <Vault items={vault} onSelectItem={handleSelectFromVault} onDeleteItem={handleDeleteFromVault} />
+              <Vault 
+                items={vault} 
+                onSelectItem={handleSelectFromVault} 
+                onDeleteItem={handleDeleteFromVault}
+                onUpdateStatus={handleUpdateStatus}
+              />
             ) : (
               <div className="h-full">
                 {!result && !loading && (

@@ -8,6 +8,8 @@ export enum OCRMode {
   MASTER = 'master'
 }
 
+export type VaultStatus = 'not-visited' | 'in-progress' | 'completed';
+
 export interface User {
   id: string;
   name: string;
@@ -46,6 +48,7 @@ export interface VaultItem {
   result: OCRResultData;
   sourceLang: string;
   targetLang: string;
+  status: VaultStatus;
 }
 
 export interface ModeConfig {
